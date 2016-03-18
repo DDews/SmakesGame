@@ -20,7 +20,7 @@ match is ever actually joined and no bandwidth is used.
 Make sure to [create a project](https://developer.cloud.unity3d.com/projects) and link it in the editor.
 
 ## How to Use
-NAT Punchthrough requires an external server, often referred to a Facilitator, in order to broker the connections between peers.
+NAT Punchthrough requires an external server, often referred to as a Facilitator, in order to broker the connections between peers.
 
 1. Get the Facilitator running
   1. Beg, borrow, or steal a linux server
