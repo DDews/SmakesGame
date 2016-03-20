@@ -1,5 +1,3 @@
-**There is a more full featured version of this here: https://github.com/noblewhale/NAT-Traversal-for-UNET**
-
 # NATPunchthroughClient
 An example implementation of NAT Punchthrough combined with Unity's UNet HLAPI.
 
