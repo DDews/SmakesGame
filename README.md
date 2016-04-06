@@ -1,4 +1,4 @@
-This project has evolved into a much more full-features unity asset available here: http://u3d.as/qhh
+This project has evolved into a much more full-featured unity asset available here: http://u3d.as/qhh
 
 # NATPunchthroughClient
 An example implementation of NAT Punchthrough combined with Unity's UNet HLAPI.
