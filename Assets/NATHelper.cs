@@ -12,7 +12,7 @@ using System.Collections;
 public class NATHelper : MonoBehaviour
 {
     // IP Addres and port of the server running NATCompleteServer
-    public string facilitatorIP = "50.57.111.104"; 
+    public string facilitatorIP = "35.193.1.47"; 
     public ushort facilitatorPort = 61111;
 
     [NonSerialized]
