@@ -1,7 +1,8 @@
-﻿using UnityEngine;
+using UnityEngine;
 using RakNet;
 using System;
 using System.Collections;
+using System.Text;
 
 /**
  * Uses RakNet to perform NAT Punchthrough using an externally hosted Facilitator.
@@ -164,6 +165,7 @@ public class NATHelper : MonoBehaviour
                     // RakNet is then reconnected to the facilitator on a new random port.
                     if (packet.systemAddress == facilitatorSystemAddress)
                     {
+                        string ip = Encoding.ASCII.GetString(packet.data);
                         rakPeer.Shutdown(0);
                             
                         // Hole is punched, UNet can start listening

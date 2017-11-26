@@ -48,3 +48,6 @@ ExportedObj/
 # Unity3D Generated File On Crash Reports
 
 sysinfo.txt
+/.vs
+/.vs/NATPunchthroughClient/v15/Server/sqlite3/db.lock
+/.vs/NATPunchthroughClient/v15/Server/sqlite3/storage.ide

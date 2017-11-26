@@ -1,8 +1,10 @@
-﻿using UnityEngine;
-using System.Collections.Generic;
+using UnityEngine;
+using System.Collections;
 using UnityEngine.Networking;
 using UnityEngine.Networking.Match;
 using System.Reflection;
+using System.Collections.Generic;
+using System;
 
 public class NetworkManager : UnityEngine.Networking.NetworkManager
 {
@@ -11,9 +13,38 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
     NetworkMatch networkMatch;
     string hostExternalIP, hostInternalIP;
     List<NetworkServerSimple> natServers = new List<NetworkServerSimple>();
+    public static NetworkManager main;
+
+
+    [Serializable]
+    internal class JsonData
+    {
+        public string externalIP;
+        public string internalIP;
+        public string guid;
+        public string roomName;
+        public string username;
+        public int heartbeat;
+    }
+    internal class JsonHelper
+    {
+        public static T[] getJsonArray<T>(string json)
+        {
+            string newJson = "{ \"array\": " + json + "}";
+            Wrapper<T> wrapper = JsonUtility.FromJson<Wrapper<T>>(newJson);
+            return wrapper.array;
+        }
+
+        [Serializable]
+        private class Wrapper<T>
+        {
+            public T[] array;
+        }
+    }
 
     void Awake()
     {
+        main = this;
         // We abuse unity's matchmaking system to pass around connection info but no match is ever actually joined
         networkMatch = gameObject.AddComponent<NetworkMatch>();
 
@@ -33,20 +64,76 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
         {
             // This is how RakNet identifies each peer in the network
             // Clients will use the guid of the server to punch a hole
-            string guid = natHelper.guid;
-
-            // The easiest way I've found to get all the connection data to the clients is to just
-            // mash it all together in the match name
-            string name = string.Join(":", new string[] { natHelper.externalIP, Network.player.ipAddress, guid });
+            StartCoroutine(CreateRoom());
             
-            networkMatch.CreateMatch(name, 2, true, "", natHelper.externalIP, Network.player.ipAddress, 0, 0, OnMatchCreate);
+
         }
         if (GUI.Button(new Rect(0, 120, 150, 100), "Join server"))
         {
-            networkMatch.ListMatches(0, 1, "", true, 0, 0, OnMatchList);
+            StartCoroutine(GetRooms());
         }
     }
 
+    IEnumerator GetRooms()
+    {
+        //networkMatch.ListMatches(0, 1, "", true, 0, 0, OnMatchList);
+        WWW www = new WWW("http://smakes.io:8080");
+        yield return www;
+        if (!string.IsNullOrEmpty(www.error))
+        {
+            Debug.LogError(www.error);
+        }
+        else
+        {
+            // Show results as text
+            Debug.Log(www.text);
+
+                JsonData[] result = JsonHelper.getJsonArray<JsonData>(www.text.ToString());
+                OnMatchList(result);
+                // Or retrieve results as binary data
+                //byte[] results = www.downloadHandler.data;
+        }
+    }
+
+    IEnumerator CreateRoom()
+    {
+        string guid = natHelper.guid;
+
+        // The easiest way I've found to get all the connection data to the clients is to just
+        // mash it all together in the match name
+        //string name = string.Join(":", new string[] { natHelper.externalIP, Network.player.ipAddress, guid });
+
+        //networkMatch.CreateMatch(name, 2, true, "", natHelper.externalIP, Network.player.ipAddress, 0, 0, OnMatchCreate);
+        // List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
+        // formData.Add(new MultipartFormDataSection("externalIP=" + natHelper.externalIP + "&internalIP=" + Network.player.ipAddress + "&guid=" + guid + "&roomName=Test&username=Desynched&password=moon"));
+        //formData.Add(new MultipartFormFileSection("my file data", "myfile.txt"));
+
+        // UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080/api/createMatch", formData);
+        // yield return www.SendWebRequest();
+
+        WWWForm form = new WWWForm();
+        form.AddField("externalIP", natHelper.externalIP);
+        form.AddField("internalIP", Network.player.ipAddress);
+        form.AddField("guid", guid);
+        form.AddField("roomName", "Test");
+        form.AddField("username", "Desynched");
+        form.AddField("password","moon");
+
+        // Upload to a cgi script
+        UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080", form);
+        yield return www.Send();
+        if (www.error != null)
+        {
+            Debug.Log(www.error);
+        }
+        else
+        {
+            Debug.Log("Form upload complete!");
+            natHelper.startListeningForPunchthrough(OnHolePunchedServer);
+
+           StartHost();
+        }
+    }
 
     #region Network events ------------------------------------------------------------------------
 
@@ -63,7 +150,22 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
 
         natHelper.startListeningForPunchthrough(OnHolePunchedServer);
     }
-    
+
+
+    internal void OnMatchList(JsonData[] rooms)
+    {
+        if (rooms.Length > 0)
+        {
+            JsonData room = rooms[0];
+            hostExternalIP = room.externalIP;
+            hostInternalIP = room.internalIP;
+            string hostGUID = room.guid;
+            natHelper.punchThroughToServer(hostGUID, OnHolePunchedClient);
+        } else
+        {
+            Debug.Log("Error: no rooms found!");
+        }
+    }
     /**
      * Punches a hole through to the host of the first match in the list
      */
@@ -176,6 +278,9 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
         // Tell Unity to use the client we just created as _the_ client so that OnClientConnect will be called
         // and all the other HLAPI stuff just works. Oh god, so nice.
         UseExternalClient(client);
+
+        //StartClient();
+       
     }
 
     #endregion Network events ---------------------------------------------------------------------
