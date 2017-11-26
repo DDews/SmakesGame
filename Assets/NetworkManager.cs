@@ -5,6 +5,7 @@ using UnityEngine.Networking.Match;
 using System.Reflection;
 using System.Collections.Generic;
 using System;
+using System.Linq;
 
 public class NetworkManager : UnityEngine.Networking.NetworkManager
 {
@@ -14,7 +15,12 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
     string hostExternalIP, hostInternalIP;
     List<NetworkServerSimple> natServers = new List<NetworkServerSimple>();
     public static NetworkManager main;
-
+	public bool GUIEnabled = true;
+	public bool options = false;
+	public bool optionsEnabled = false;
+	public static System.Random random;
+	public string roomName;
+	public string joinRoom = "Room Name";
 
     [Serializable]
     internal class JsonData
@@ -44,6 +50,7 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
 
     void Awake()
     {
+		random = new System.Random();
         main = this;
         // We abuse unity's matchmaking system to pass around connection info but no match is ever actually joined
         networkMatch = gameObject.AddComponent<NetworkMatch>();
@@ -60,19 +67,35 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
     public void OnGUI()
     {
         GUI.enabled = natHelper.isReady;
-        if (GUI.Button(new Rect(0, 10, 150, 100), "Host"))
-        {
-            // This is how RakNet identifies each peer in the network
-            // Clients will use the guid of the server to punch a hole
-            StartCoroutine(CreateRoom());
-            
-
-        }
-        if (GUI.Button(new Rect(0, 120, 150, 100), "Join server"))
-        {
-            StartCoroutine(GetRooms());
-        }
+		if (GUIEnabled) {
+			joinRoom = GUI.TextField(new Rect(0,120,150,50), joinRoom, 25);
+			if (GUI.Button(new Rect(0, 200, 150, 100), "Join room"))
+			{
+				GUIEnabled = false;
+				StartCoroutine(GetRooms());
+			}
+		} else if (options) {
+			if (GUI.Button(new Rect(0, 10, 150, 100), ifTrue(Control.main.wrapping,"No Wrap","Wrap"))) {
+				if (optionsEnabled) {
+					Control.main.wrapping = !Control.main.wrapping;
+				}
+			}
+			if (GUI.Button(new Rect(0, 120, 150, 100), ifTrue(Control.main.disappearOnDeath, "Black on Death","Disappear on Death"))) {
+				if (optionsEnabled) {
+					Control.main.disappearOnDeath = !Control.main.disappearOnDeath;
+				}
+			}
+			if (GUI.Button(new Rect(0, 230, 150, 100), ifTrue(Control.main.respawn,"Deathmatch","Respawn"))) {
+				if (optionsEnabled) {
+					Control.main.respawn = !Control.main.respawn;
+				}
+			}
+		}
     }
+	private string ifTrue(bool value, string ifTrue, string ifFalse) {
+		if (value) return ifTrue;
+		else return ifFalse;
+	}
 
     IEnumerator GetRooms()
     {
@@ -89,13 +112,13 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
             Debug.Log(www.text);
 
                 JsonData[] result = JsonHelper.getJsonArray<JsonData>(www.text.ToString());
-                OnMatchList(result);
+                OnMatchList(result, joinRoom);
                 // Or retrieve results as binary data
                 //byte[] results = www.downloadHandler.data;
         }
     }
 
-    IEnumerator CreateRoom()
+    IEnumerator CreateRoom(string name)
     {
         string guid = natHelper.guid;
 
@@ -111,11 +134,19 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
         // UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080/api/createMatch", formData);
         // yield return www.SendWebRequest();
 
-        WWWForm form = new WWWForm();
+		if (name == null || name == "")
+		{
+			roomName = RandomString(10); 
+		}
+		else
+		{
+			roomName = name;
+		}
+		WWWForm form = new WWWForm();
         form.AddField("externalIP", natHelper.externalIP);
         form.AddField("internalIP", Network.player.ipAddress);
         form.AddField("guid", guid);
-        form.AddField("roomName", "Test");
+        form.AddField("roomName", roomName);
         form.AddField("username", "Desynched");
         form.AddField("password","moon");
 
@@ -130,7 +161,6 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
         {
             Debug.Log("Form upload complete!");
             natHelper.startListeningForPunchthrough(OnHolePunchedServer);
-
            StartHost();
         }
     }
@@ -152,19 +182,20 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
     }
 
 
-    internal void OnMatchList(JsonData[] rooms)
+    internal void OnMatchList(JsonData[] rooms, string name)
     {
-        if (rooms.Length > 0)
+        foreach (JsonData room in rooms)
         {
-            JsonData room = rooms[0];
-            hostExternalIP = room.externalIP;
-            hostInternalIP = room.internalIP;
-            string hostGUID = room.guid;
-            natHelper.punchThroughToServer(hostGUID, OnHolePunchedClient);
-        } else
-        {
-            Debug.Log("Error: no rooms found!");
+			if (room.roomName.Equals(name)) {
+				roomName = room.roomName;
+				hostExternalIP = room.externalIP;
+				hostInternalIP = room.internalIP;
+				string hostGUID = room.guid;
+				natHelper.punchThroughToServer(hostGUID, OnHolePunchedClient); 
+				return;
+			}
         }
+		StartCoroutine(CreateRoom(name));
     }
     /**
      * Punches a hole through to the host of the first match in the list
@@ -289,5 +320,10 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager
     {
         natServers.ForEach(server => server.Update());
     }
+	public static string RandomString(int length) {
+		const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+		return new string(Enumerable.Repeat(chars, length)
+		  .Select(s => s[random.Next(s.Length)]).ToArray());
+	}
 
 }

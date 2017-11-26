@@ -224,6 +224,11 @@ MonoBehaviour:
   matchSize: 4
   isNetworkActive: 0
   matchMaker: {fileID: 0}
+  GUIEnabled: 1
+  options: 0
+  optionsEnabled: 0
+  roomName: 
+  joinRoom: 
 --- !u!4 &159159671
 Transform:
   m_ObjectHideFlags: 0
@@ -358,6 +363,12 @@ MonoBehaviour:
     type: 2}
   appleDisplays: []
   numApples: 1
+  size: 50
+  wrapping: 1
+  roundActive: 0
+  disappearOnDeath: 0
+  respawn: 1
+  living: 0
 --- !u!4 &581677370
 Transform:
   m_ObjectHideFlags: 0

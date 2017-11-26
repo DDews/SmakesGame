@@ -11,15 +11,16 @@ public class Player : NetworkBehaviour {
 	[SyncVar]
 	internal Color color = Color.black;
 	internal Color _color = Color.black;
+	internal Color oldColor = Color.black;
 	[SyncVar]
 	internal Vector3 dir;
 	[SyncVar]
 	internal bool living = true;
 
-	[SyncVar] internal int speed = 2;
-	[SyncVar] public int fastSpeed = 10;
-	[SyncVar] public int midSpeed = 5;
-	[SyncVar] public int slowSpeed = 2;
+	[SyncVar] internal int speed = 3;
+	[SyncVar] public int fastSpeed = 30;
+	[SyncVar] public int midSpeed = 15;
+	[SyncVar] public int slowSpeed = 10;
 
 
 	[SyncVar]
@@ -35,6 +36,14 @@ public class Player : NetworkBehaviour {
 	internal int myIndex;
 	[SyncVar] internal float time = 0;
 
+	public void Respawn() {
+		transform.position = new Vector3(Random.Range(-Control.main.size, Control.main.size), Random.Range(-Control.main.size, Control.main.size),0).floor();
+		segments.Clear();
+		segments.Add(transform.position);
+		color = oldColor;
+		Control.main.living++;
+		living = true;
+	}
 	void Start() {
 		displays = new List<Transform>();
 	}
@@ -48,10 +57,12 @@ public class Player : NetworkBehaviour {
 		myIndex = Control.main.players.IndexOf(this);
 		transform.position = transform.position.floor();
 		segments.Add(transform.position);
+		Control.main.living++;
 	}
 	void OnDisable() {
 		if (Control.main != null) {
 			Control.main.players[myIndex] = null;
+			if (living) Control.main.living--;
 		}
 	}
 
@@ -88,6 +99,12 @@ public class Player : NetworkBehaviour {
 		if (Input.GetKeyDown(KeyCode.R)) {
 			CmdDoSomething();
 		}
+		if (Input.GetKeyDown(KeyCode.F1)) {
+			if (isServer) NetworkManager.main.optionsEnabled = true;
+			else NetworkManager.main.optionsEnabled = false;
+
+			NetworkManager.main.options = !NetworkManager.main.options;
+		}
 
 	}
 
@@ -98,14 +115,37 @@ public class Player : NetworkBehaviour {
 	}
 
 	public void LateUpdate() {
-		while (displays.Count < segments.Count) {
-			Transform seg = Instantiate(segmentPrefab);
-			seg.SetParent(transform);
-			seg.GetComponent<Renderer>().material.color = color;
-			displays.Add(seg);
+		if (segments.Count < displays.Count) {
+			foreach (Transform d in displays) {
+				Destroy(d.gameObject);
+			}
+			displays.Clear();
 		}
-		for (int i = 0; i < displays.Count; i++) {
-			displays[i].position = segments[i];
+		if (!living) {
+			if (Control.main.disappearOnDeath && displays.Count > 0)
+			{
+				foreach (Transform d in displays) 
+				{
+					Destroy(d.gameObject);
+				}
+				displays.Clear();
+			}
+		}
+		else 
+		{
+			while (displays.Count < segments.Count) 
+			{
+				Transform seg = Instantiate(segmentPrefab);
+				seg.SetParent(transform);
+				seg.GetComponent<Renderer>().material.color = color;
+				displays.Add(seg);
+			}
+			if (displays.Count == segments.Count) {
+				for (int i = 0; i < displays.Count; i++) 
+				{
+					displays[i].position = segments[i];
+				}
+			}
 		}
 	}
 	[Command]
@@ -136,7 +176,7 @@ public class Player : NetworkBehaviour {
 		// yield return www.SendWebRequest();
 
 		WWWForm form = new WWWForm();
-		form.AddField("roomName", "Test");
+		form.AddField("roomName", NetworkManager.main.roomName);
 
 		// Upload to a cgi script
 		UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080/heartbeat", form);
@@ -161,6 +201,22 @@ public class Player : NetworkBehaviour {
 			// TODO: Move all segments forward 
 		}
 	}
+	public void Die() {
+		Control.main.living--;
+		living = false;
+		oldColor = color;
+		color = Color.black;
+		UpdateDisplayColor();
+		size = 0;
+		length = 10;
+		if (isServer && Control.main.living <= 0) {
+			Debug.Log(Control.main.living);
+			Control.main.roundActive = false;
+		}
+		if (Control.main.disappearOnDeath) {
+			segments.Clear();
+		}
+	}
 
 	private void MoveForward() {
 		Vector3 head = transform.position;
@@ -171,9 +227,9 @@ public class Player : NetworkBehaviour {
 				length = (int)(length * 1.5f);
 				Control.main.MoveApple(hit.transform);
 			} else {
-				living = false;
-				color = Color.black;
-				UpdateDisplayColor();
+				Die();
+				if (Control.main.respawn) Respawn();
+				return;
 			}
 
 		}
@@ -181,6 +237,21 @@ public class Player : NetworkBehaviour {
 		Vector3 lastTail = segments[segments.Count - 1];
 
 		head += dir;
+		if (Control.main.wrapping) {
+			if (Mathf.Abs(head.x) > Camera.main.BoundsMax().x) {
+				head.x *= -1;
+			}
+			if (Mathf.Abs(head.y) > Camera.main.BoundsMax().y) {
+				head.y *= -1;
+			}
+		} else {
+			if (Mathf.Abs(head.x) > Camera.main.BoundsMax().x || Mathf.Abs(head.y) > Camera.main.BoundsMax().y)
+			{
+				Die();
+				if (Control.main.respawn) Respawn();
+				return;
+			}
+		}
 		transform.position = head = head.floor();
 
 		segments.Insert(0, head);
