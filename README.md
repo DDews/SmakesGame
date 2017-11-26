@@ -24,7 +24,7 @@ Go to [releases](../../releases) to download the Smakes.zip.
 Extract all to a folder of your choosing. Run Smakes.exe.
 Click Join server. If no rooms are available, try Host instead.
 
-##TODO
+## TODO
 - Hide the Host and Join Server buttons, they stick around longer than they should.
 - Add Game settings collapsable menu for Host.
 - List available rooms if more than one exists.
