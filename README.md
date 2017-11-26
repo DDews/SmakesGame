@@ -17,14 +17,14 @@ RakNet DLL's are included for 32bit and 64bit windows, but it shouldn't be a pro
 Special thanks to ninjapretzel for the Unity kata and help.
 This is a Unity project that lets people host and play my 3DS Homebrew Snakes game on PC over the internet.
 
-##How To Play
+## How To Play
 Runs on Windows 10. More OS's will be supported in the near future.
 
 Go to [releases](/releases) to download the Smakes.zip.
 Extract all to a folder of your choosing. Run Smakes.exe.
 Click Join server. If no rooms are available, try Host instead.
 
-##TODO
+## TODO
 - Hide the Host and Join Server buttons, they stick around longer than they should.
 - Add Game settings collapsable menu for Host.
 - List available rooms if more than one exists.
