@@ -17,6 +17,7 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 	public NATHelper natHelper;
 	FieldInfo clientIDField;
     NetworkMatch networkMatch;
+	public static string roomPassword = "moon";
 	public static List<String> guids = new List<String>();
 	public static List<String> externalIPs = new List<String>();
 	public static List<int> externalPorts = new List<int>();
@@ -27,15 +28,23 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
     public static NetworkManager main = null;
 	public bool GUIEnabled = true;
 	public Texture2D bg;
+	public Texture2D highlightBg;
+	public Texture2D buttonBg;
+	internal Transform logo = null;
+	public Transform logoPrefab;
 	public bool options = false;
 	public bool optionsEnabled = false;
 	public static System.Random random;
-	public string roomName;
+	public static string roomName;
 	public string joinRoom = "Room Name";
 	public bool showScore = false;
+	public List<JsonObject> rooms = new List<JsonObject>();
+	public bool quitScreen = false;
+	public bool quitClient = false;
+	public float roomPull = 1;
 
     void Awake() {
-		Screen.SetResolution(800, 600, false);
+		Screen.SetResolution(1020, 768, false);
 		random = new System.Random();
 		main = this;
 		//networkMatch = gameObject.AddComponent<NetworkMatch>();
@@ -48,10 +57,26 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 		GUI.enabled = natHelper.isReady;
 		GUIStyle bgStyle = new GUIStyle();
 		bgStyle.normal.background = bg;
+		bgStyle.normal.textColor = Color.white;
+		bgStyle.fontSize = 20;
+		bgStyle.onHover.background = highlightBg;
+		bgStyle.onHover.textColor = Color.yellow;
+		bgStyle.alignment = TextAnchor.MiddleCenter;
+		GUIStyle buttonStyle = new GUIStyle();
+		buttonStyle.normal.background = buttonBg;
+		buttonStyle.normal.textColor = Color.white;
+		buttonStyle.hover.background = highlightBg;
+		buttonStyle.hover.textColor = Color.white;
+		buttonStyle.alignment = TextAnchor.MiddleCenter;
+		buttonStyle.fontSize = 20;
 		GUILayout.BeginArea(new Rect(0,Screen.width / 6  * 4,Screen.width,Screen.height / 6));
 		GUILayout.BeginHorizontal();
 		GUIStyle debugStyle = GUI.skin.GetStyle("Label");
 		debugStyle.alignment = TextAnchor.LowerRight;
+		GUIStyle centerStyle = GUI.skin.GetStyle("Label");
+		centerStyle.alignment = TextAnchor.MiddleCenter;
+		GUIStyle rightStyle = GUI.skin.GetStyle("Label");
+		rightStyle.alignment = TextAnchor.MiddleRight;
 		GUILayout.Label(debugMsg, debugStyle);
 		GUILayout.EndVertical();
 		GUILayout.EndArea();
@@ -94,15 +119,77 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 		}
 		else 
 		{
+			if (quitScreen) {
+				GUILayout.BeginArea(new Rect(0,0,Screen.width,Screen.height),bgStyle);
+				GUILayout.BeginVertical();
+				GUILayout.BeginHorizontal();
+				if (GUI.Button(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 10, 100, 50), "Quit")) {
+					StartCoroutine(QuitGame());
+				}
+				GUILayout.EndHorizontal();
+				GUILayout.EndVertical();
+				GUILayout.EndArea();
+			} else if (quitClient) {
+				GUILayout.BeginArea(new Rect(0, 0, Screen.width, Screen.height), bgStyle);
+				GUILayout.BeginVertical();
+				GUILayout.EndVertical();
+				if (GUI.Button(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 10, 100, 50), "Quit")) {
+					Application.Quit();
+				}
+				GUILayout.EndArea();
 
+			}
 			if (GUIEnabled) {
-				joinRoom = GUI.TextField(new Rect(0,120,150,50), joinRoom, 25);
-				if (GUI.Button(new Rect(0, 200, 150, 100), "Join room") || Event.current.keyCode == KeyCode.Return)
+				roomPull += Time.deltaTime;
+				if (roomPull > 1) {
+					roomPull = 0;
+					StartCoroutine(ListRooms());
+				}
+				if (logo == null) logo = Instantiate(logoPrefab);
+				GUILayout.BeginArea(new Rect(0,0,Screen.width,Screen.height));
+				GUILayout.BeginVertical();
+				GUILayout.BeginHorizontal();
+				GUILayout.Space(200);
+				GUILayout.Label("Create Room:",rightStyle,GUILayout.Width(200));
+				joinRoom = GUILayout.TextField(joinRoom, 25,GUILayout.Width(100));
+				if (Event.current.keyCode == KeyCode.Return)
 				{
+					if (logo != null) {
+						Destroy(logo.gameObject);
+						logo = null;
+					}
 					GUIEnabled = false;
 					StartCoroutine(GetRooms());
 					//matchMaker.ListMatches(0, 10, "", true, 0, 0, OnMatchList);
 				}
+				GUILayout.Space(300);
+				GUILayout.EndHorizontal();
+				GUILayout.Space(50);
+				if (rooms.Count == 0) {
+					centerStyle.alignment = TextAnchor.MiddleCenter;
+					GUILayout.Label("No rooms found",centerStyle);
+				}
+				else {
+					GUILayout.Label("Rooms:",bgStyle);
+					GUILayout.Space(20);
+					foreach(JsonObject room in rooms) {
+						GUILayout.BeginHorizontal();
+						Debug.Log(room.GetString("roomName").Replace('+',' '));
+						if (GUILayout.Button(room.GetString("roomName").Replace('+',' ') + " (" + room.GetInt("players") + " players)",buttonStyle)) {
+							if (logo != null) {
+								Destroy(logo.gameObject);
+								logo = null;
+							}
+							GUIEnabled = false;
+							joinRoom = room.GetString("roomName");
+							StartCoroutine(GetRooms());
+						}
+						GUILayout.EndHorizontal();
+						GUILayout.Space(10);
+					}
+				}
+				GUILayout.EndVertical();
+				GUILayout.EndArea();
 			} else if (options) {
 				GUILayout.BeginArea(new Rect(0,0,200,170),bgStyle);
 				GUILayout.BeginVertical();
@@ -149,10 +236,10 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 			if (Player.localPlayer != null) 
 			{
 				GUILayout.BeginArea(new Rect(0,0,Screen.width,Screen.height));
-				GUIStyle rightStyle = GUI.skin.GetStyle("Label");
-				rightStyle.alignment = TextAnchor.UpperRight;
+				GUIStyle upperRightStyle = GUI.skin.GetStyle("Label");
+				upperRightStyle.alignment = TextAnchor.UpperRight;
 				GUILayout.BeginVertical();
-				GUILayout.Label("Room: " + roomName, rightStyle);
+				GUILayout.Label("Room: " + roomName.Replace('+',' '), upperRightStyle);
 				GUILayout.EndVertical();
 				GUILayout.EndArea();
 				GUILayout.BeginArea(new Rect(0, 0, Screen.width, Screen.height));
@@ -207,7 +294,39 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
                 //byte[] results = www.downloadHandler.data;
         }
     }
+	IEnumerator ListRooms() {
+		//networkMatch.ListMatches(0, 1, "", true, 0, 0, OnMatchList);
+		WWW www = new WWW("http://smakes.io:8080");
+		yield return www;
+		if (!string.IsNullOrEmpty(www.error)) {
+			Debug.LogError(www.error);
+		} else {
+			JsonArray result = Json.Parse<JsonArray>(www.text.ToString());
+			rooms.Clear();
+			foreach(JsonObject obj in result) {
+				rooms.Add(obj);
+			}
+		}
+	}
+	IEnumerator QuitGame() {
+		WWWForm form = new WWWForm();
+		form.AddField("roomName", roomName);
+		form.AddField("password", roomPassword);
+		form.AddField("kill", "true");
 
+		// Upload to a cgi script
+		UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080", form);
+		yield return www.Send();
+		if (www.error != null) {
+			Debug.Log(www.error);
+		} else {
+			Debug.Log("Form upload complete!");
+			NetworkManager.quit();
+		}
+	}
+	public static void quit() {
+		Application.Quit();
+	}
    IEnumerator CreateRoom(string name)
     {
         string guid = natHelper.guid;
@@ -232,13 +351,14 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 		{
 			roomName = name;
 		}
+		roomPassword = RandomString(20);
 		WWWForm form = new WWWForm();
         form.AddField("externalIP", natHelper.externalIP);
         form.AddField("internalIP", Network.player.ipAddress);
         form.AddField("guid", guid);
         form.AddField("roomName", roomName);
-        form.AddField("username", "Desynched");
-        form.AddField("password","moon");
+		form.AddField("players",1);
+        form.AddField("password", roomPassword);
 
         // Upload to a cgi script
         UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080", form);
@@ -556,6 +676,9 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 	}
 	void Update() {
 		natServers.ForEach(server => server.Update());
+	}
+	public void OnError(NetworkMessage netMsg) {
+		Debug.Log("netMsg: " + netMsg);
 	}
 }
 class MsgType : NATTraversal.MsgType {

@@ -105,10 +105,31 @@ public class Player : NetworkBehaviour {
 		base.OnStartClient();
 		Control.main.players.Add(this);
 	}
+	public override void OnNetworkDestroy() {
+		base.OnNetworkDestroy();
+	}
 	void OnEnable() {
 	}
-	void OnDisable() {
+	void OnApplicationQuit() {
+		if (isServer) {
+			CloseRoom();
+		}
 		Despawn();
+	}
+	IEnumerator CloseRoom() {
+		WWWForm form = new WWWForm();
+		form.AddField("roomName", NetworkManager.roomName);
+		form.AddField("password", NetworkManager.roomPassword);
+		form.AddField("kill", "true");
+
+		// Upload to a cgi script
+		UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080", form);
+		yield return www.Send();
+		if (www.error != null) {
+			Debug.Log(www.error);
+		} else {
+			Debug.Log("Form upload complete!");
+		}
 	}
 	void Despawn() {
 		if (Control.main) {
@@ -217,6 +238,16 @@ public class Player : NetworkBehaviour {
 			else NetworkManager.main.optionsEnabled = false;
 
 			NetworkManager.main.options = !NetworkManager.main.options;
+		}
+		if (Input.GetKeyDown(KeyCode.Escape)) {
+			if (NetworkManager.main.quitClient || NetworkManager.main.quitScreen) {
+				NetworkManager.main.quitScreen = NetworkManager.main.quitClient = false;
+			}
+			else {
+
+				if (isServer) NetworkManager.main.quitScreen = true;
+				else NetworkManager.main.quitClient = true;
+			}
 		}
 		if (dir != Vector3.zero && dir + lastDir != Vector3.zero) 
 		{
@@ -477,6 +508,14 @@ public class Player : NetworkBehaviour {
 		//FixSegments();
 		this.transform.position = pos;
 	}
+	[Command]
+	void CmdLeaveMatch() {
+		Control.main.players[myIndex] = null;
+		if (living) Control.main.living--;
+	}
+	public void LeaveRoom() {
+		CmdLeaveMatch();
+	}
 	void FixSegments() {
 		if (segments.Count < 3) return;
 		int oldi = -1;
@@ -535,7 +574,8 @@ public class Player : NetworkBehaviour {
 		// yield return www.SendWebRequest();
 
 		WWWForm form = new WWWForm();
-		form.AddField("roomName", NetworkManager.main.roomName);
+		form.AddField("roomName", NetworkManager.roomName);
+		form.AddField("players",Control.main.players.Count);
 
 		// Upload to a cgi script
 		UnityWebRequest www = UnityWebRequest.Post("http://35.193.1.47:8080/heartbeat", form);
