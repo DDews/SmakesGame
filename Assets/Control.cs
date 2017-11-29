@@ -10,25 +10,37 @@ public class Control : NetworkBehaviour {
     public List<Player> players;
 
     public Transform applePrefab;
+
+	internal bool boundaryShown = false;
+	public Transform boundary;
+	
     public List<Transform> appleDisplays;
 
+	public Transform boundaryPrefab;
+
+
+	[SyncVar] public float roundResultsTime = 5f;
+	[SyncVar] public int rounds = 1;
     [SyncVar] public int numApples = 1;
-    [SyncVar] public SyncListVector3 applePositions;
+    public SyncListVector3 applePositions;
 
     [SyncVar] public int size = 300;
 
+	[SyncVar] public bool addTeleports = false;
 	[SyncVar] public bool wrapping = true;
 	[SyncVar] public bool roundActive = true;
 	[SyncVar] public bool disappearOnDeath = false;
 	[SyncVar] public bool respawn = true;
-	public int living = 0;
+	[SyncVar] public bool allowFast = true;
+	[SyncVar] public bool allowSlow = true;
+	[SyncVar] public int living = 0;
 
     internal float tick = 0f;
     internal float tickRate = 0.05f;
 
     void OnEnable()
     {
-        main = this;
+		main = this;
     }
     void OnDisable()
     {
@@ -39,11 +51,17 @@ public class Control : NetworkBehaviour {
 	}
 	
 	void Update () {
-
+		if (wrapping && boundaryShown) {
+			Debug.Log("hiding boundary");
+			Destroy(boundary.gameObject);
+			boundaryShown = false;
+		} else if (!wrapping && !boundaryShown) {
+			Debug.Log("showing boundary");
+			boundaryShown = true;
+			ShowBoundary();
+		}
         Camera.main.orthographicSize = size;
-
-        if (isServer)
-        {
+		if (isServer) {
 			if (roundActive) {
 				tick += Time.deltaTime;
 				while (tick > tickRate)
@@ -51,18 +69,25 @@ public class Control : NetworkBehaviour {
 					tick -= tickRate;
 					foreach (Player p in players)
 					{
-						if (p != null) p.tick(tickRate);
+						if (p != null) p.Tick(tickRate,false);
 					}
+		}
+	}			else {
+				tick += Time.deltaTime;
+				if (tick > roundResultsTime) {
+					foreach (Player p in players) 
+					{
+						if (p != null) {
+							p.apples = 0;
+							p.Respawn();
+						}
+					}
+					rounds++;
+					roundActive = true;
+					tick = 0f;
 				}
-			} else {
-				foreach (Player p in players) 
-				{
-					if (p != null) p.Respawn();
-				}
-				roundActive = true;
 			}
-
-        }
+		}
     }
 
     public override void OnStartServer()
@@ -92,9 +117,50 @@ public class Control : NetworkBehaviour {
         if (index > -1)
         {
             applePositions[index] = new Vector3(Random.Range(-50, 50), Random.Range(-50, 50), 0);
+			foreach (Player p in players) 
+			{
+				if (p != null) {
+					if (addTeleports)
+					{
+						p.teleports++;
+					}
+					else
+					{
+						p.teleports = 1;
+					}
+				}
+			}
+			
         }
     }
 
+	public void TeleportApple() {
+		for (int i = 0; i < applePositions.Count; i++) {
+			applePositions[i] = new  Vector3(Random.Range(-size,size),Random.Range(-size,size),0);
+		}
+	}
+	internal void ShowBoundary() {
+		boundary = Instantiate(boundaryPrefab);
+		LineRenderer lineRenderer = boundary.GetComponent<LineRenderer>();
+		lineRenderer.widthMultiplier = 1f;
+		lineRenderer.positionCount = 5;
+		Vector2 bounds = Camera.main.BoundsMax();
+		float w = bounds.x;
+		float h = bounds.y;
+		lineRenderer.SetPosition(0, new Vector3(-w, h, 0));
+		lineRenderer.SetPosition(1, new Vector3(w, h, 0));
+		lineRenderer.SetPosition(2, new Vector3(w, -h, 0));
+		lineRenderer.SetPosition(3, new Vector3(-w, -h, 0));
+		lineRenderer.SetPosition(4, new Vector3(-w, h, 0));
+		// A simple 2 color gradient with a fixed alpha of 1.0f.
+		float alpha = 1.0f;
+		Gradient gradient = new Gradient();
+		gradient.SetKeys(
+			new GradientColorKey[] { new GradientColorKey(Color.red, 1.0f), new GradientColorKey(Color.red, 1.0f) },
+			new GradientAlphaKey[] { new GradientAlphaKey(alpha, 1.0f), new GradientAlphaKey(alpha, 1.0f) }
+			);
+		lineRenderer.colorGradient = gradient;
+	}
 }
 
 

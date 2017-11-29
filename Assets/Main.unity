@@ -120,8 +120,8 @@ GameObject:
   serializedVersion: 5
   m_Component:
   - component: {fileID: 159159671}
-  - component: {fileID: 159159669}
   - component: {fileID: 159159670}
+  - component: {fileID: 159159669}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -137,7 +137,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 159159668}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5620eb24138cfa54abdab29c341d3314, type: 3}
+  m_Script: {fileID: 11500000, guid: 8d996995b49ac85489affaa7dbf6604f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   facilitatorIP: 35.193.1.47
@@ -211,7 +211,7 @@ MonoBehaviour:
     m_MaxTimerTimeout: 12000
     m_MinNetSimulatorTimeout: 1
     m_MaxNetSimulatorTimeout: 12000
-  m_Channels: 
+  m_Channels: 0500000000000000
   m_UseWebSockets: 0
   m_UseSimulator: 0
   m_SimulatedLatency: 1
@@ -224,11 +224,16 @@ MonoBehaviour:
   matchSize: 4
   isNetworkActive: 0
   matchMaker: {fileID: 0}
+  natHelper: {fileID: 0}
+  hostExternalIP: 
+  hostInternalIP: 
   GUIEnabled: 1
+  bg: {fileID: 2800000, guid: e2de3f826da6cd14fbea9746b6156d11, type: 3}
   options: 0
   optionsEnabled: 0
   roomName: 
   joinRoom: 
+  showScore: 0
 --- !u!4 &159159671
 Transform:
   m_ObjectHideFlags: 0
@@ -291,7 +296,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_NormalizedViewPortRect:
     serializedVersion: 2
     x: 0
@@ -361,14 +366,22 @@ MonoBehaviour:
   players: []
   applePrefab: {fileID: 4259242305249068, guid: 00b80d07a65c85e4dbf77c78bb8a24f1,
     type: 2}
+  boundary: {fileID: 0}
   appleDisplays: []
+  boundaryPrefab: {fileID: 4819168799606310, guid: 343c48030cc19854ba235460342fb6d5,
+    type: 2}
+  roundResultsTime: 5
+  rounds: 1
   numApples: 1
-  size: 50
+  size: 100
+  addTeleports: 0
   wrapping: 1
-  roundActive: 0
+  roundActive: 1
   disappearOnDeath: 0
-  respawn: 1
-  living: 0
+  respawn: 0
+  allowFast: 1
+  allowSlow: 1
+  living: 1
 --- !u!4 &581677370
 Transform:
   m_ObjectHideFlags: 0
