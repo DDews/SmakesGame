@@ -44,7 +44,6 @@ public class Control : NetworkBehaviour {
     }
     void OnDisable()
     {
-        main = null;
     }
     
 	void Start () {
@@ -161,14 +160,26 @@ public class Control : NetworkBehaviour {
 			);
 		lineRenderer.colorGradient = gradient;
 	}
+	public void Reset() {
+		foreach(Transform p in appleDisplays) {
+			Destroy(p.gameObject);
+		}
+		appleDisplays.Clear();
+		foreach(Player p in players) {
+			Destroy(p.gameObject);
+		}
+		players.Clear();
+		if (boundary != null) Destroy(boundary.gameObject);
+		boundary = null;
+	}
 }
 
 
 public static class Helpers
 {
-    public static Vector3 floor(this Vector3 v)
+    public static Vector3 round(this Vector3 v)
     {
-        return new Vector3(Mathf.Floor(v.x), Mathf.Floor(v.y), Mathf.Floor(v.z));
+        return new Vector3(Mathf.Round(v.x), Mathf.Round(v.y), Mathf.Round(v.z));
     }
 	public static Vector2 ToVector2(this Vector3 v) {
 		return new Vector2(v.x,v.y);

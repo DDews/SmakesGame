@@ -8,9 +8,11 @@ public class SyncListVector3 : SyncListStruct<Vector3> { }
  * Most basic player possible. Use arrow keys to move around.
  */
 public class Player : NetworkBehaviour {
+	internal Vector3 willChange = Vector3.zero;
 	[SyncVar]
 	internal Color color = Color.grey;
 	internal Color _color = Color.grey;
+	internal Vector3 oldDir = Vector3.zero;
 	[SyncVar]
 	public SyncListString guids;
 	[SyncVar]
@@ -28,6 +30,8 @@ public class Player : NetworkBehaviour {
 	[SyncVar]
 	public int kills = 0;
 
+
+	internal List<Vector3> joints = new List<Vector3>();
 	[SyncVar]
 	internal Vector3 dir;
 	internal Vector3 ghostDir = Vector3.zero;
@@ -49,7 +53,7 @@ public class Player : NetworkBehaviour {
 	[SyncVar] public int fastSpeed = 10;
 	[SyncVar] public int midSpeed = 5;
 	[SyncVar] public int slowSpeed = 2;
-	[SyncVar] public int speed = 2;
+	[SyncVar] public int speed = 5;
 
 	internal float tickRate = 0.05f;
 	public float tick = 0;
@@ -78,8 +82,10 @@ public class Player : NetworkBehaviour {
 		kills = 0;
 		length = 10;
 		size = 0;
-		transform.position = new Vector3(Random.Range(-Control.main.size, Control.main.size), Random.Range(-Control.main.size, Control.main.size),0).floor();
+		transform.position = new Vector3(Random.Range(-Control.main.size, Control.main.size), Random.Range(-Control.main.size, Control.main.size),0).round();
 		segments.Clear();
+		joints.Clear();
+		joints.Add(transform.position);
 		segments.Add(transform.position);
 		color = oldColor;
 		teleports = 1;
@@ -116,6 +122,9 @@ public class Player : NetworkBehaviour {
 		}
 		Despawn();
 	}
+	void OnDisable() {
+		Control.main.living--;
+	}
 	IEnumerator CloseRoom() {
 		WWWForm form = new WWWForm();
 		form.AddField("roomName", NetworkManager.roomName);
@@ -144,6 +153,7 @@ public class Player : NetworkBehaviour {
 			}
 			displays.Clear();
 			mySegs.Clear();
+			joints.Clear();
 		}
 		int indexToSend = -1;
 		for (int i = 3; i < segments.Count; i++) {
@@ -160,7 +170,7 @@ public class Player : NetworkBehaviour {
 		}
 	}
 	void Update() {
-		NetworkManager.debugMsg = "" + Control.main.living;
+		if (!isLocalPlayer) NetworkManager.debugMsg = "" + size;
 		if (!living && respawning && isLocalPlayer) {
 			ClearSegments();
 			CmdRespawn();
@@ -174,9 +184,9 @@ public class Player : NetworkBehaviour {
 			}
 		} else {
 			heartbeat += Time.deltaTime;
-			if (heartbeat > 0.1) {
+			if (heartbeat > 0.5) {
 				heartbeat = 0;
-				//SendGhost();
+				//CmdSetDirection(ghostDir, transform.position, mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position);
 			}
 		}
 
@@ -188,9 +198,9 @@ public class Player : NetworkBehaviour {
 		if (localPlayer == null) localPlayer = this;
 
 
-		if (ghostDir != this.dir && !isServer) {
+		if (ghostDir != Vector3.zero && ghostDir + lastDir != Vector3.zero && ghostDir != this.dir && !isServer) {
 	
-			CmdSetDirection(wantedDir, transform.position, mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position);
+			CmdSetDirection(tick, ghostDir, transform.position, mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position);
 		}
 		
 
@@ -219,11 +229,11 @@ public class Player : NetworkBehaviour {
 			CmdTeleportApple();
 		}
 		if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) {
-			CmdSetSpeed(fastSpeed);
+			CmdSetSpeed(fastSpeed,transform.position);
 		} else if (Input.GetKey(KeyCode.Space)) {
-			CmdSetSpeed(slowSpeed);
-		} else {
-			CmdSetSpeed(midSpeed);
+			CmdSetSpeed(slowSpeed,transform.position);
+		} else if (speed != midSpeed) {
+			CmdSetSpeed(midSpeed,transform.position);
 		}
 		if (Input.GetKey(KeyCode.Tab)) {
 			NetworkManager.main.showScore = true;
@@ -253,7 +263,7 @@ public class Player : NetworkBehaviour {
 		{
 			this.ghostDir = dir;
 			this.dir = dir;
-			if (!isServer) CmdSetDirection(dir,transform.position, mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position);
+			if (!isServer) CmdSetDirection(tick, dir,transform.position.round(), mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position.round());
 		}
 
 		if (!isServer && living) {
@@ -312,44 +322,52 @@ public class Player : NetworkBehaviour {
 		if (!(isServer && isLocalPlayer)) {
 			Vector2 bounds = Camera.main.BoundsMax();
 			float w = bounds.x;
+			
 			float h = bounds.y;
-			if (segments.Count > 2) {
+			/*if (segments.Count > 2) {
 				LineRenderer lineRenderer = transform.GetComponent<LineRenderer>();
 				lineRenderer.widthMultiplier = 1f;
 				List<Vector3> points = new List<Vector3>();
-				points.Add(segments[0]);
-				for (int i = 1; i < segments.Count; i++) {
-					Vector3 fill = segments[i];
-					float diffX = Mathf.Abs(segments[i].x - points[i - 1].x);
-					float diffY = Mathf.Abs(segments[i].y - points[i - 1].y);
-					int addX = segments[i].x > points[i - 1].x ? 1 : -1;
-					int addY = segments[i].y > points[i - 1].y ? 1 : -1;
-					// if the next segment's y is the same as this one's, but its far away on x
-					if (diffX > 1 && diffX < w * 0.5 && segments[i].y == points[i - 1].y) {
-						while (Mathf.Abs(fill.x - segments[i].x) > 1) {
-							fill.x += addX;
-							points.Add(fill);
+				bool drawing = false;
+				Vector3 lastSeg = segments[segments.Count - 1];
+				points.Add(lastSeg);
+				int removeAt = -1;
+				for (int i = joints.Count - 2; i >= 1; i--) {
+					Vector3 segA = joints[i];
+					Vector3 segB = joints[i - 1];
+					Vector3 diff = segA - lastSeg;
+					Vector3 diff2 = segB - lastSeg;
+					Vector3 diffSeg = segA - segB;
+					if (drawing) points.Add(joints[i].floor());
+					if (!drawing) {
+						if (Vector2.Distance(joints[i],lastSeg) <= 1.5) drawing = true;
+						else if (diffSeg.x == 0 || diffSeg.y == 0) {
+							if (diff.x == 0 && diff2.x == 0) drawing = true;
+							else if (diff.y == 0 && diff2.y == 0) drawing = true;
 						}
+						if (drawing) removeAt = i;
 					}
-					// if the next segment's x is the same as this one's, but its far away on y
-					else if (diffY > 1 && diffY < h * 0.5 && segments[i].x == points[i - 1].x) {
-						while (Mathf.Abs(fill.y - segments[i].y) > 1) {
-							fill.y += addY;
-							points.Add(fill);
-						}
-					} else if (diffX > w * 0.5 || diffY > h * 0.5) {
-						break;
-					}
-					points.Add(segments[i]);
 				}
+				if (removeAt != -1) {
+					int remove = joints.Count - removeAt;
+					for (int i = 0; i < remove; i++) {
+						joints.RemoveAt(removeAt);
+					}
+					joints[removeAt] = lastSeg;
+				}
+				for (int i = 0; i < joints.Count; i++) {
+					points.Add(joints[i]);
+				}
+				//points.Add(transform.position + dir);
 				lineRenderer.positionCount = points.Count;
+				Debug.Log(points.Count);
 				for(int i = 0; i < points.Count; i++) {
 					Vector3 d = points[i];
 					lineRenderer.SetPosition(i,d);
 				}
 				lineRenderer.startColor = color;
 				lineRenderer.endColor = color;
-			} 
+			} */
 		}
 		if (!isServer && isLocalPlayer) ghosted = true;
 		if (ghosted) {
@@ -358,6 +376,7 @@ public class Player : NetworkBehaviour {
 					Destroy(d.gameObject);
 				}
 				displays.Clear();
+				joints.Clear();
 			}
 		}
 		else {
@@ -375,6 +394,7 @@ public class Player : NetworkBehaviour {
 				{
 					Destroy(d.gameObject);
 				}
+				joints.Clear();
 				displays.Clear();
 			}
 		}
@@ -396,20 +416,8 @@ public class Player : NetworkBehaviour {
 			}
 			else 
 			{
-
-				while (displays.Count < segments.Count) 
-				{
-					Transform seg = Instantiate(segmentPrefab);
-					seg.SetParent(transform);
-					seg.GetComponent<Renderer>().material.color = color;
-					displays.Add(seg);
-				}
-				if (displays.Count == segments.Count) {
-					for (int i = 0; i < displays.Count; i++) 
-					{
-						displays[i].position = segments[i];
-					}
-				}
+				updateSegs();
+				
 			}
 		}
 	}
@@ -433,14 +441,14 @@ public class Player : NetworkBehaviour {
 				}
 			}
 		*/
+
 		Control.main.living++;
 		myIndex = Control.main.players.IndexOf(this);
 		Vector2 bounds = Camera.main.BoundsMax();
 		float x = bounds.x;
 		float y = bounds.y;
 		transform.position = new Vector3(Random.Range(-x, x), Random.Range(-y, y), 0);
-		transform.position = transform.position.floor();
-		segments.Add(transform.position);
+		transform.position = transform.position.round();
 	}
 	[Command]
 	void CmdRespawn() {
@@ -469,6 +477,7 @@ public class Player : NetworkBehaviour {
 		}
 		if (Control.main.disappearOnDeath) {
 			segments.Clear();
+			joints.Clear();
 		}
 	}
 	[Command]
@@ -498,63 +507,181 @@ public class Player : NetworkBehaviour {
 		}
 	}
 	[Command]
-	void CmdSetDirection(Vector3 dir, Vector3 pos, Vector3 tail) {
-		if (dir + lastDir == Vector3.zero) return;
-		this.dir = dir;
+	void CmdSetDirection(float newTick, Vector3 dir, Vector3 pos, Vector3 tail) {
+		if (dir == Vector3.zero || dir + lastDir == Vector3.zero) return;
 		if (segments.Count > 1) {
 			this.segments[0] = pos;
 			this.segments[segments.Count - 1] = tail;
 		}
-		//FixSegments();
-		this.transform.position = pos;
+		if (!isLocalPlayer) {
+			if (joints.Count > 0) {
+				while (size > length && joints.Count > size * 2) {
+					joints.RemoveAt(joints.Count - 1);
+				}
+				if (dir != oldDir && Vector3.Distance(pos,joints[0]) >= 1) {
+					oldDir = dir;
+					//joints.RemoveAt(joints.Count - 1);
+					joints.Insert(0,pos);
+					//FixSegments();
+				} else if (dir != oldDir) {
+					willChange = dir;
+				}
+			} else {
+				if (joints.Count == 0) {
+					joints.Add(pos);
+				}
+				else if (dir != oldDir && Vector3.Distance(pos, joints[0]) >= 1) {
+					oldDir = dir;
+					//joints.RemoveAt(joints.Count - 1);
+					joints.Insert(0, pos);
+					//FixSegments();
+				} else if (dir != oldDir) {
+					willChange = dir;
+				}
+			}
+			string str = "[";
+				foreach (Vector3 v in joints) {
+					str += v.ToString() + ", ";
+				}
+				str += "]";
+				Debug.Log(str);
+			//FixSegments();
+			tick = Vector3.Distance(transform.position,pos) * tickRate * speed;
+			transform.position = pos.round();
+			this.dir = dir;
+		}
 	}
-	[Command]
-	void CmdLeaveMatch() {
-		Control.main.players[myIndex] = null;
-		if (living) Control.main.living--;
-	}
-	public void LeaveRoom() {
-		CmdLeaveMatch();
+	void updateSegs() {
+		while (displays.Count < size) {
+			Transform seg = Instantiate(segmentPrefab);
+			seg.SetParent(transform);
+			seg.GetComponent<Renderer>().material.color = color;
+			displays.Add(seg);
+		}
+		if (size > 0 && displays.Count == size && joints.Count > 0) {
+			Vector3 offset = joints[0].round();
+			displays[0].position = transform.position.round();
+			if (size > 2) {
+				int length = -1;
+				int startJ = 0;
+				if (Vector3.Distance(transform.position.round(),joints[0].round()) >= 1) {
+					for (int i = 1, z = 0, j = startJ; i < displays.Count && j < joints.Count; i++) {
+						Vector3 jointB = joints[j].round();
+						Vector3 jointA = j == 0 ? Vector3.zero : joints[j - 1].round();
+						int dx = 0;
+						int dy = 0;
+						if (j == startJ) {
+							dx = -Mathf.RoundToInt(dir.x);
+							dy = -Mathf.RoundToInt(dir.y);
+						} else if (jointB.x == jointA.x) {
+							if (jointB.y > jointA.y) dy = 1;
+							else dy = -1;
+						} else if (jointB.y == jointA.y) {
+							if (jointB.x > jointA.x) dx = 1;
+							else dx = -1;
+						}
+						if (dx == 0 && dy == 0) {
+							Debug.LogError("Shouldn't be happening at index " + i + ", " + j);
+							break;
+						}
+						Vector3 newPos = (displays[i - 1].position.round() + new Vector3(dx, dy, 0)).round();
+						if (Vector3.Distance(displays[i].position, newPos) > 1) {
+							displays[i].position = newPos;
+						}
+						z++;
+						if (i < segments.Count) segments[i] = displays[i].position.round();
+						else segments.Add(displays[i].position.round());
+						float newDis = Vector3.Distance(displays[i].position.round(), joints[j].round());
+						if (length == -1 && newDis <= 2) {
+							j++;
+							while (newDis > 0) {
+								i++;
+								if (i < displays.Count) {
+									newPos = (displays[i - 1].position.round() + new Vector3(dx, dy, 0)).round();
+									if (Vector3.Distance(displays[i].position, newPos) > 1) {
+										displays[i].position = newPos;
+									}
+								}
+								newDis--;
+							}
+							if (j < joints.Count) {
+								length = Mathf.RoundToInt(Vector2.Distance(joints[j], joints[j - 1]));
+								z = 0;
+							}
+						} else if (length != -1 && z >= length) {
+							j++;
+							if (j < joints.Count) {
+								length = Mathf.FloorToInt(Vector2.Distance(joints[j], joints[j - 1]));
+								z = 0;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	void FixSegments() {
-		if (segments.Count < 3) return;
-		int oldi = -1;
-		int oldj = -1;
-		for (int i = 0, j = segments.Count - 1; i < segments.Count - 1; i++, j--) 
-		{
-			Vector3 h = segments[i];
-			Vector3 t = segments[j];
-			Vector3 nh = segments[i + 1];
-			Vector3 nt = segments[j - 1];
-			
-			if (nh.x != h.x && nh.y != h.y) {
-				if (Mathf.Abs(nh.x - h.x) == 1) {
-					h.x += nh.x - h.x;
-				} else if (Mathf.Abs(nh.y - h.y) == 1) {
-					h.y += nh.y - h.y;
-				} else {
-					i--;
+		if (segments.Count < 3 || joints.Count < 3) return;
+		for (int i = 1, j = 1; i < joints.Count && j < segments.Count; j++) {
+			Vector3 jointA = joints[i - 1];
+			Vector3 jointB = joints[i];
+			Vector3 segA = segments[j - 1];
+			Vector3 segB = segments[j];
+			Vector3 jointDiff = jointB - jointA;
+			Vector3 segDiff = segB - segA;
+			// if the joints are in line
+			if (jointDiff.x == 0 || jointDiff.y == 0) {
+				// joint declares movement on Y axis
+				if (jointDiff.x != 0) {
+					// if there is no movement on Y axis
+					if (segDiff.y == 0) {
+						// snap the segment into place
+						segA.y = jointA.y;
+						segments[j - 1] = segA;
+						// there is movement somewhere else!
+					} else {
+						// if this is because it has met the joint, snap it into place
+						if (segA.x == jointB.x || segA.y == jointB.y) {
+							segments[j - 1] = jointB;
+							// move to next joint
+							i++;
+							// we don't know what happened.. but thye CHANGEd direction so... move to next joint
+						} else {
+
+						}
+					}
 				}
-				segments[i] = h;
-			}
-			if (t.x != nt.x && t.y != nt.y) {
-				if (Mathf.Abs(nt.x - t.x) == 1) {
-					t.x += nt.x - h.x;
-				} else if (Mathf.Abs(nt.y - t.y) == 1) {
-					t.y += nt.y - t.y;
-				} else {
-					j++;
+				// joint declares movement on X axis
+				else {
+					// if there is no movement on X axis
+					if (segDiff.x == 0) {
+						// snap the segment into place
+						segA.x = jointA.x;
+						segments[j - 1] = segA;
+						// there is movement somewhere else!
+					} else {
+						// if this is because it has met the joint, snap it into place
+						if (segA.x == jointB.x || segA.y == jointB.y) {
+							segments[j - 1] = jointB;
+							// move to next joint
+							i++;
+							// We don't know what happened... but they CHANGED direction, so.. move to next joint
+						} else {
+							i++;
+						}
+					}
+
 				}
-				segments[j] = t;
+				// joints not in line, give up
+			} else {
+				Debug.Log("Gave up on joints: " + joints);
+				break;
 			}
-			if (oldi == i && oldj == j) break;
-			oldi = i;
-			oldj = j;
 		}
 	}
 
 	[Command]
-	void CmdSetSpeed(int speed) {
+	void CmdSetSpeed(int speed, Vector3 pos) {
 		if (speed > midSpeed && !Control.main.allowFast) return;
 		if (speed < midSpeed && !Control.main.allowSlow) return;
 		this.speed = speed;
@@ -641,20 +768,21 @@ public class Player : NetworkBehaviour {
 				}
 			}
 		}
-		transform.position = head = head.floor();
-
+		transform.position = head = head.round();
 		if (ghosted) {
 			mySegs.Insert(0, head);
-
+			size++;
 			if (mySegs.Count > length) {
+				size--;
 				mySegs.RemoveAt(mySegs.Count - 1);
 			}
 		}
 		else
 		{
 			segments.Insert(0, head);
-
+			size++;
 			if (segments.Count > length) {
+				size--;
 				segments.RemoveAt(segments.Count - 1);
 			}
 		}

@@ -162,7 +162,7 @@ MonoBehaviour:
   m_ScriptCRCCheck: 1
   m_MaxDelay: 0.01
   m_LogLevel: 2
-  m_PlayerPrefab: {fileID: 1000013980687998, guid: 5337902bdb9979b4682769cf3d88a2af,
+  m_PlayerPrefab: {fileID: 1107214963082008, guid: 5337902bdb9979b4682769cf3d88a2af,
     type: 2}
   m_AutoCreatePlayer: 1
   m_PlayerSpawnMethod: 0
@@ -229,11 +229,16 @@ MonoBehaviour:
   hostInternalIP: 
   GUIEnabled: 1
   bg: {fileID: 2800000, guid: e2de3f826da6cd14fbea9746b6156d11, type: 3}
+  highlightBg: {fileID: 2800000, guid: 36394a3bfff440844a946815d8a4db82, type: 3}
+  buttonBg: {fileID: 2800000, guid: 25d568aa3e3fcfb44ac6f982f2afc3d2, type: 3}
+  logoPrefab: {fileID: 4414744696507678, guid: bfed3772deec6154db7ef800ef533672, type: 2}
   options: 0
   optionsEnabled: 0
-  roomName: 
   joinRoom: 
   showScore: 0
+  quitScreen: 0
+  quitClient: 0
+  roomPull: 1
 --- !u!4 &159159671
 Transform:
   m_ObjectHideFlags: 0

@@ -133,7 +133,15 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 				GUILayout.BeginArea(new Rect(0, 0, Screen.width, Screen.height), bgStyle);
 				GUILayout.BeginVertical();
 				GUILayout.EndVertical();
-				if (GUI.Button(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 10, 100, 50), "Quit")) {
+				if (GUI.Button(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 10, 100, 50), "Leave Room")) {
+					StopClient();
+					Control.main.Reset();
+					showScore = false;
+					quitClient = false;
+					GUIEnabled = true;
+				}
+				if (GUI.Button(new Rect(Screen.width / 2 - 50, Screen.height / 2 + 70, 100, 50), "Quit")) {
+					StopClient();
 					Application.Quit();
 				}
 				GUILayout.EndArea();
@@ -675,7 +683,13 @@ public class NetworkManager : UnityEngine.Networking.NetworkManager {
 
 	}
 	void Update() {
-		natServers.ForEach(server => server.Update());
+		natServers.ForEach(server => {
+			try {
+				server.Update();
+			} catch (Exception e) {
+				Debug.Log(e);
+			}
+		});
 	}
 	public void OnError(NetworkMessage netMsg) {
 		Debug.Log("netMsg: " + netMsg);
