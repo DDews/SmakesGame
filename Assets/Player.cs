@@ -8,12 +8,15 @@ public class SyncListVector3 : SyncListStruct<Vector3> { }
  * Most basic player possible. Use arrow keys to move around.
  */
 public class Player : NetworkBehaviour {
+	[SyncVar] internal bool host = false;
+	internal const int MAX_LENGTH = 100;
 	internal Vector3 willChange = Vector3.zero;
 	[SyncVar]
 	internal Color color = Color.grey;
 	internal Color _color = Color.grey;
 	internal Vector3 oldDir = Vector3.zero;
 
+	internal SyncListVector3 wraps;
 	[SyncVar]
 	internal bool respawning = false;
 
@@ -54,7 +57,7 @@ public class Player : NetworkBehaviour {
 
 	public List<Vector3> segments = new List<Vector3>();
 
-	public List<Vector3> mySegs;
+	public List<Vector3> mySegs = new List<Vector3>();
 
 	public float pingDelta = 0;
 
@@ -76,24 +79,12 @@ public class Player : NetworkBehaviour {
 		size = 0;
 		transform.position = new Vector3(Random.Range(-Control.main.size, Control.main.size), Random.Range(-Control.main.size, Control.main.size),0).round();
 		segments.Clear();
-		joints.Clear();
-		joints.Add(transform.position);
 		segments.Add(transform.position);
 		color = oldColor;
 		teleports = 1;
 	}
-	void ClearSegments() {
-		mySegs.Clear();
-		foreach (Vector3 d in segments) {
-			mySegs.Add(d);
-		}
-	}
 	void Start() {
 		displays = new List<Transform>();
-		if (!isServer) CmdSpawn(Network.player.ipAddress, NetworkManager.main.networkPort);
-	}
-	void StartServer() {
-		CmdSpawn(Network.player.ipAddress, NetworkManager.main.networkPort);
 	}
 	public override void OnStartServer() {
 		base.OnStartServer();
@@ -101,12 +92,14 @@ public class Player : NetworkBehaviour {
 	}
 	public override void OnStartClient() {
 		base.OnStartClient();
-		Control.main.players.Add(this);
 	}
 	public override void OnNetworkDestroy() {
 		base.OnNetworkDestroy();
 	}
 	void OnEnable() {
+		Control.main.players.Add(this);
+		CmdSpawn("", 0);
+		if (isServer) host = true;
 	}
 	void OnApplicationQuit() {
 		if (isServer) {
@@ -138,33 +131,17 @@ public class Player : NetworkBehaviour {
 			Control.main.players[myIndex] = null;
 		}
 	}
-	void SendGhost() {
-		if (segments.Count < mySegs.Count && !living) {
-			foreach (Transform p in displays) {
-				Destroy(p.gameObject);
-			}
-			displays.Clear();
-			mySegs.Clear();
-			joints.Clear();
-		}
-		int indexToSend = -1;
-		for (int i = 3; i < segments.Count; i++) {
-			if (!mySegs.Contains(segments[i])) {
-				indexToSend = i;
-				break;
-			}
-		}
-		if (indexToSend != -1) {
-			for (int i = 0; i < mySegs.Count; i++) {
-				CmdSendGhost(i, mySegs[i]);
-			}
-			//CmdSendHead(this.transform.position);
-		}
-	}
+
 	void Update() {
-		if (!isLocalPlayer && !isServer) NetworkManager.debugMsg = "" + segments.Count + ", " + size;
+		if (isLocalPlayer) {
+			string str = "";
+			foreach (Player p in Control.main.players) {
+				str += "" + p.displays.Count + ", " + p.joints.Count + ", " + p.mySegs.Count + ", " + p.segments.Count + ", " + p.wraps.Count + ", " + p.size + ", " + p.transform.position + "\n";
+			}
+			NetworkManager.debugMsg = str;
+		}
 		if (!living && respawning && isLocalPlayer) {
-			ClearSegments();
+			mySegs.Clear();
 			CmdRespawn();
 			respawning = false;
 		}
@@ -192,7 +169,7 @@ public class Player : NetworkBehaviour {
 
 		if (ghostDir != Vector3.zero && ghostDir + lastDir != Vector3.zero && ghostDir != this.dir && !isServer) {
 	
-			CmdSetDirection(tick, ghostDir, transform.position, mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position);
+			CmdSetDirection(ghostDir, transform.position);
 		}
 		
 
@@ -254,8 +231,7 @@ public class Player : NetworkBehaviour {
 		if (dir != Vector3.zero && dir + lastDir != Vector3.zero) 
 		{
 			this.ghostDir = dir;
-			this.dir = dir;
-			if (!isServer) CmdSetDirection(tick, dir,transform.position.round(), mySegs.Count > 0 ? mySegs[mySegs.Count - 1] : transform.position.round());
+			CmdSetDirection(dir,transform.position.round());
 		}
 
 		if (!isServer && living) {
@@ -284,47 +260,25 @@ public class Player : NetworkBehaviour {
 		}
 	}
 	public void LateUpdate() {
-		pingDelta += Time.deltaTime;
-		/*if (pingDelta > 1) {
-			pingDelta = 0;
-			if (externalIPs.Count > 0) {
-				string str = "";
-				//NetworkManager.debugMsg = clients[clients.Count - 1] + " ip";
-				//if (isServer) NetworkManager.debugMsg = NetworkManager.main.natHelper.rakPeer.GetAveragePing(new RakNet.RakNetGUID(System.Convert.ToUInt64(clients[clients.Count - 1],10))) + "ms";
-				string str = "";
-				foreach(NATServer s in NetworkManager.main.natServers) {
-					if (s == null) continue;
-					foreach(NetworkConnection c in s.connections) {
-						if (c == null) continue;
-						str += c.address.Split(null)[1];
-					}
-				}
-		for (int i = 0; i < externalIPs.Count && i < internalPorts.Count; i++) {
-					if (i < guids.Count) str += guids[i] + "\n";
-					str += externalIPs[i] + ":" + externalPorts[i];
-					if (i < externalIPs.Count && i < externalPorts.Count) str += "@" + internalPorts[i];
-					str += "\n";
-				}
-				str += externalIPs.Count + ", " + externalPorts.Count + ", " + internalPorts.Count;
-				NetworkManager.debugMsg = str;
-				
-			}
-		}*/
 		bool ghosted = false;
-		if (!(isServer && isLocalPlayer)) {
-			Vector2 bounds = Camera.main.BoundsMax();
-			float w = bounds.x;
-			
-			float h = bounds.y;
-		}
 		if (!isServer && isLocalPlayer) ghosted = true;
 		if (ghosted) {
-			if (mySegs.Count < displays.Count || segments.Count < displays.Count) {
-				foreach (Transform d in displays) {
+			if (mySegs.Count < displays.Count) {
+				foreach(Transform d in displays) {
 					Destroy(d.gameObject);
 				}
 				displays.Clear();
-				joints.Clear();
+			}
+			if (displays.Count > size) {
+				List<Transform> removed = new List<Transform>();
+				for (int i = size; i < displays.Count; i++) {
+					removed.Add(displays[i].transform);
+				}
+				foreach (Transform r in removed) {
+					displays.Remove(r);
+					if (r != null) Destroy(r.gameObject);
+				}
+				removed.Clear();
 			}
 		}
 		if (!living) {
@@ -334,7 +288,6 @@ public class Player : NetworkBehaviour {
 				{
 					Destroy(d.gameObject);
 				}
-				joints.Clear();
 				displays.Clear();
 			}
 		}
@@ -342,13 +295,23 @@ public class Player : NetworkBehaviour {
 		{
 			if (ghosted) 
 			{
+				int s = size;
+				while (mySegs.Count > s) {
+					mySegs.Remove(mySegs[s - 1]);
+				}
+				if (displays.Count > mySegs.Count) {
+					foreach (Transform d in displays) {
+						Destroy(d.gameObject);
+					}
+					displays.Clear();
+				}
 				while (displays.Count < mySegs.Count) {
 					Transform seg = Instantiate(segmentPrefab);
 					seg.SetParent(transform);
 					seg.GetComponent<Renderer>().material.color = color;
 					displays.Add(seg);
 				}
-				if (displays.Count == mySegs.Count) {
+				if (displays.Count == mySegs.Count && displays.Count == size) {
 					for (int i = 0; i < mySegs.Count; i++) {
 						displays[i].position = mySegs[i];
 					}
@@ -357,13 +320,18 @@ public class Player : NetworkBehaviour {
 			}
 			else 
 			{
-				if (segments.Count < displays.Count) {
-					foreach (Transform d in displays) {
-						Destroy(d.gameObject);
-					}
-					displays.Clear();
-				}
 				if (isServer) {
+					if (displays.Count > segments.Count) {
+						List<Transform> removed = new List<Transform>();
+						for (int i = segments.Count; i < displays.Count; i++) {
+							removed.Add(displays[i].transform);
+						}
+						foreach (Transform r in removed) {
+							displays.Remove(r);
+							if (r != null) Destroy(r.gameObject);
+						}
+						removed.Clear();
+					}
 					while (displays.Count < segments.Count) {
 						Transform seg = Instantiate(segmentPrefab);
 						seg.SetParent(transform);
@@ -376,34 +344,30 @@ public class Player : NetworkBehaviour {
 								displays[i].position = segments[i].round();
 							}
 						}
-					}
-					else updateSegs();
+					} else updateSegs();
 				}
 				else {
-					if (size < displays.Count) {
+					if (size < displays.Count * 0.5) {
 						foreach (Transform p in displays) {
 							Destroy(p.gameObject);
 						}
 						displays.Clear();
 					}
-					while (size > displays.Count) {
+					int s = size;
+					while (displays.Count < s) {
 						Transform seg = Instantiate(segmentPrefab);
 						seg.SetParent(transform);
 						seg.GetComponent<Renderer>().material.color = color;
 						displays.Add(seg);
 					}
-					updateSegs();
-					/*while (displays.Count < segments.Count) {
-						Transform seg = Instantiate(segmentPrefab);
-						seg.SetParent(transform);
-						seg.GetComponent<Renderer>().material.color = color;
-						displays.Add(seg);
-					}*/
-					/*if (segments.Count == displays.Count) {
-						for (int i = 0; i < segments.Count; i++) {
-							displays[i].position = segments[i];
+					if (host) {
+						if (displays.Count <= segments.Count) {
+							for (int i = 0; i < segments.Count; i++) {
+								displays[i].position = segments[i];
+							}
 						}
-					}*/
+					} else updateSegs();
+					
 				}
 			}
 		}
@@ -428,7 +392,7 @@ public class Player : NetworkBehaviour {
 				}
 			}
 		*/
-
+		size = 0;
 		Control.main.living++;
 		myIndex = Control.main.players.IndexOf(this);
 		Vector2 bounds = Camera.main.BoundsMax();
@@ -436,6 +400,7 @@ public class Player : NetworkBehaviour {
 		float y = bounds.y;
 		transform.position = new Vector3(Random.Range(-x, x), Random.Range(-y, y), 0);
 		transform.position = transform.position.round();
+		joints.Insert(0, transform.position);
 	}
 	[Command]
 	void CmdRespawn() {
@@ -445,7 +410,7 @@ public class Player : NetworkBehaviour {
 	}
 	[Command]
 	void CmdEat(int appleIndex) {
-		length = (int)(length * 1.5f);
+		if (length < MAX_LENGTH) length = (int)(length * 1.5f);
 		Control.main.MoveApple(Control.main.appleDisplays[appleIndex]);
 		apples++;
 	}
@@ -468,17 +433,6 @@ public class Player : NetworkBehaviour {
 		}
 	}
 	[Command]
-	void CmdSendGhost(int index, Vector3 seg) {
-		if (index < segments.Count) {
-			segments[index] = seg;
-		}
-	}
-	[Command]
-	void CmdSendHead(Vector3 head) {
-		segments[0] = head;
-		this.transform.position = head;
-	}
-	[Command]
 	void CmdTeleportApple() {
 		if (teleports > 0) 
 		{
@@ -494,73 +448,126 @@ public class Player : NetworkBehaviour {
 		}
 	}
 	[Command]
-	void CmdSetDirection(float newTick, Vector3 dir, Vector3 pos, Vector3 tail) {
-		if (dir == Vector3.zero || dir + lastDir == Vector3.zero) return;
-		if (!isLocalPlayer) {
-			if (joints.Count > 0) {
-				while (size > length && joints.Count > size * 2) {
-					joints.RemoveAt(joints.Count - 1);
+	void CmdInsertJoint(Vector3 pos) {
+		if (wraps.Count > size) {
+			List<Vector3> removed = new List<Vector3>();
+			for (int i = size; i < wraps.Count; i++) {
+				removed.Add(wraps[i]);
+			}
+			foreach(Vector3 r in removed) {
+				wraps.Remove(r);
+			}
+			removed.Clear();
+		}
+		wraps.Insert(0,pos);
+		if (joints.Count > 0) {
+			if (joints.Count > size) {
+				List<Vector3> removed = new List<Vector3>();
+				for (int i = size; i < joints.Count; i++) {
+					removed.Add(joints[i]);
 				}
-				if (dir != oldDir && Vector3.Distance(pos,joints[0]) >= 1) {
-					oldDir = dir;
-					//joints.RemoveAt(joints.Count - 1);
-					joints.Insert(0,pos);
-					//FixSegments();
-				} else if (dir != oldDir) {
-					willChange = dir;
-				}
-			} else {
-				if (joints.Count == 0) {
-					joints.Add(pos);
-				}
-				else if (dir != oldDir && Vector3.Distance(pos, joints[0]) >= 1) {
-					oldDir = dir;
-					//joints.RemoveAt(joints.Count - 1);
-					joints.Insert(0, pos);
-					//FixSegments();
-				} else if (dir != oldDir) {
-					willChange = dir;
+				foreach (Vector3 r in removed) {
+					joints.Remove(r);
 				}
 			}
-			string str = "[";
-				foreach (Vector3 v in joints) {
-					str += v.ToString() + ", ";
-				}
-				str += "]";
-				Debug.Log(str);
-			//FixSegments();
-			tick = Vector3.Distance(transform.position,pos) * tickRate * speed;
-			Tick(tick,false);
-			transform.position = pos.round();
+			joints.Insert(0, pos);
+		} else {
+			if (joints.Count == 0) {
+				joints.Add(pos);
+			}
 		}
+	}
+	[Command]
+	void CmdSetDirection(Vector3 dir, Vector3 pos) {
+		if (dir == Vector3.zero || dir + lastDir == Vector3.zero) return;
+		if (joints.Count > 0) {
+			if (joints.Count > size) {
+				List<Vector3> removed = new List<Vector3>();
+				for (int i = size; i < joints.Count; i++) {
+					removed.Add(joints[i]);
+				}
+				foreach (Vector3 r in removed) {
+					joints.Remove(r);
+				}
+				removed.Clear();
+			}
+			if (dir != oldDir && joints.Count > 0 && Vector3.Distance(pos,joints[0]) >= 1) {
+				oldDir = dir;
+				//joints.RemoveAt(joints.Count - 1);
+				joints.Insert(0,pos);
+				//FixSegments();
+			} else if (dir != oldDir) {
+				willChange = dir;
+			}
+		} else {
+			if (joints.Count == 0) {
+				joints.Add(pos);
+			}
+			else if (dir != oldDir && Vector3.Distance(pos, joints[0]) >= 1) {
+				oldDir = dir;
+				//joints.RemoveAt(joints.Count - 1);
+				joints.Insert(0, pos);
+				//FixSegments();
+			} else if (dir != oldDir) {
+				willChange = dir;
+			}
+		}
+		/*string str = "[";
+			foreach (Vector3 v in joints) {
+				str += v.ToString() + ", ";
+			}
+			str += "]";
+			Debug.Log(str);*/
+		//FixSegments
 		this.dir = dir;
 	}
 	void updateSegs() {
-		while (displays.Count < size) {
+		if (isLocalPlayer) return;
+		while (displays.Count < mySegs.Count) {
 			Transform seg = Instantiate(segmentPrefab);
 			seg.SetParent(transform);
 			seg.GetComponent<Renderer>().material.color = color;
 			displays.Add(seg);
 		}
-		while (displays.Count > size) {
-			Destroy(displays[displays.Count - 1].gameObject);
-			displays.RemoveAt(displays.Count - 1);
+		if (displays.Count > size) {
+			List<Transform> removed = new List<Transform>();
+			for (int i = size; i < displays.Count; i++) {
+				removed.Add(displays[i].transform);
+			}
+			foreach (Transform r in removed) {
+				if (r != null) Destroy(r.gameObject);
+				displays.Remove(r);
+			}
+			removed.Clear();
 		}
+		Vector2 bounds = Camera.main.BoundsMax();
+		float w = bounds.x;
+		float h = bounds.y;
 		if (size > 0 && displays.Count == size && joints.Count > 0) {
 			Vector3 offset = joints[0].round();
 			displays[0].position = transform.position.round();
 			if (size > 2) {
 				int length = -1;
-				int startJ = 0;
 				if (Vector3.Distance(transform.position.round(),joints[0].round()) >= 1) {
-					for (int i = 1, z = 0, j = startJ; i < displays.Count && j < joints.Count; i++) {
+					for (int i = 1, z = 0, j = 0, wr = 0; i < displays.Count && j < joints.Count; i++) {
 						Vector3 jointB = joints[j].round();
 						Vector3 jointA = j == 0 ? Vector3.zero : joints[j - 1].round();
+						//bool shouldFlip = Vector3.Distance(jointA,jointB) > w * 0.5 && (jointB.x + jointA.x  < 1 || jointB.y + jointA.y < 1);
 						int dx = 0;
 						int dy = 0;
-						if (j == startJ) {
-							dx = -Mathf.RoundToInt(dir.x);
-							dy = -Mathf.RoundToInt(dir.y);
+						if (j == 0) {
+							Vector3 diff = jointB - transform.position.round();
+							if (Mathf.Abs(diff.x) > Mathf.Abs(diff.y)) {
+								if (diff.x >= 0) dx = 1;
+								else dx = -1;
+							} else if (Mathf.Abs(diff.y) > Mathf.Abs(diff.x)) {
+								if (diff.y >= 0) dy = 1;
+								else dy = -1;
+							} else {
+								break;
+							}
+							//dx = -Mathf.RoundToInt(dir.x);
+							//dy = -Mathf.RoundToInt(dir.y);
 						} else if (jointB.x == jointA.x) {
 							if (jointB.y > jointA.y) dy = 1;
 							else dy = -1;
@@ -568,8 +575,13 @@ public class Player : NetworkBehaviour {
 							if (jointB.x > jointA.x) dx = 1;
 							else dx = -1;
 						}
+						/*if (shouldFlip && Vector3.Distance(displays[i - 1].position,jointB) > Vector3.Distance(displays[i - 1].position,jointA) ) {
+							dx *= -1;
+							dy *= -1;
+							Debug.LogError("FLIPPING");
+						}*/
 						if (dx == 0 && dy == 0) {
-							Debug.LogError("Shouldn't be happening at index " + i + ", " + j);
+							//Debug.LogError("Shouldn't be happening at index " + i + ", " + j);
 							break;
 						}
 						Vector3 newPos = (displays[i - 1].position.round() + new Vector3(dx, dy, 0)).round();
@@ -578,8 +590,16 @@ public class Player : NetworkBehaviour {
 						}
 						z++;
 						float newDis = Vector3.Distance(displays[i].position.round(), joints[j].round());
-						if (length == -1 && newDis <= 2) {
+						if (length == -1 && newDis <= 1) {
 							j++;
+							if (wraps.Count > wr && Vector3.Distance(wraps[wr],jointB) <= 1) {
+								j++;
+								if (dx != 0) newPos.x *= -1;
+								if (dy != 0) newPos.y *= -1;
+								displays[i].position = newPos;
+								wr += 2;
+								newDis = 0;
+							}
 							while (newDis > 0) {
 								i++;
 								if (i < displays.Count) {
@@ -596,6 +616,13 @@ public class Player : NetworkBehaviour {
 							}
 						} else if (length != -1 && z >= length) {
 							j++;
+							if (wraps.Count > wr && Vector3.Distance(wraps[wr], jointB) <= 1) {
+								if (dx != 0) newPos.x *= -1;
+								if (dy != 0) newPos.y *= -1;
+								displays[i].position = newPos;								
+								j ++;
+								wr += 2;
+							}
 							if (j < joints.Count) {
 								length = Mathf.FloorToInt(Vector2.Distance(joints[j], joints[j - 1]));
 								z = 0;
@@ -606,7 +633,13 @@ public class Player : NetworkBehaviour {
 			}
 		}
 	}
-
+	List<Vector3> RemoveAllAbove(List<Vector3> input, int index) {
+		List<Vector3> r = new List<Vector3>();
+		for (int i = 0; i < index && i < input.Count; i++) {
+			r.Add(input[i]);
+		}
+		return r;
+	}
 	[Command]
 	void CmdSetSpeed(int speed, Vector3 pos) {
 		if (speed > midSpeed && !Control.main.allowFast) return;
@@ -655,7 +688,7 @@ public class Player : NetworkBehaviour {
 	public void MoveForward(bool ghosted) {
 		if (respawning || !living) return;
 		Vector3 head = transform.position;
-		if (ghosted || (isServer && isLocalPlayer)) {
+		if (ghosted || isServer) {
 			RaycastHit hit;
 			if (Physics.Raycast(head, ghostDir, out hit, 1f, Physics.DefaultRaycastLayers)) {
 				if (hit.transform.GetComponent<Apple>() != null) {
@@ -681,10 +714,14 @@ public class Player : NetworkBehaviour {
 
 		if (Control.main.wrapping) {
 			if (Mathf.Abs(head.x) > Camera.main.BoundsMax().x) {
+				if (isLocalPlayer) CmdInsertJoint(transform.position.round());
 				head.x *= -1;
+				if (isLocalPlayer) CmdInsertJoint(head.round());
 			}
 			if (Mathf.Abs(head.y) > Camera.main.BoundsMax().y) {
+				if (isLocalPlayer) CmdInsertJoint(transform.position.round());
 				head.y *= -1;
+				if (isLocalPlayer) CmdInsertJoint(head.round());
 			}
 		} else {
 			if (Mathf.Abs(head.x) > Camera.main.BoundsMax().x || Mathf.Abs(head.y) > Camera.main.BoundsMax().y)
@@ -697,11 +734,14 @@ public class Player : NetworkBehaviour {
 			}
 		}
 		transform.position = head = head.round();
-		if (ghosted) {
+		if (ghosted && ghostDir != Vector3.zero) {
 			mySegs.Insert(0, head);
 			size++;
-			if (mySegs.Count > length) {
+			if (size > length) {
 				size--;
+			}
+			int s = size;
+			while (mySegs.Count > s) {
 				mySegs.RemoveAt(mySegs.Count - 1);
 			}
 		}
@@ -709,7 +749,7 @@ public class Player : NetworkBehaviour {
 		{
 			size++;
 			segments.Insert(0, head);
-			if (segments.Count > length) {
+			if (size > length) {
 				size--;
 				segments.RemoveAt(segments.Count - 1);
 			}
