@@ -70,8 +70,9 @@ public class Control : NetworkBehaviour {
 					{
 						if (p != null) p.Tick(tickRate,false);
 					}
-		}
-	}			else {
+				}
+			}
+			else if (isServer) {
 				tick += Time.deltaTime;
 				if (tick > roundResultsTime) {
 					foreach (Player p in players) 

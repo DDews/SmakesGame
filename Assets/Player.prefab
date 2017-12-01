@@ -124,13 +124,13 @@ MonoBehaviour:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
   m_GameObject: {fileID: 1107214963082008}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1768714887, guid: 870353891bb340e2b2a9c8707e7419ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_TransformSyncMode: 1
-  m_SendInterval: 0.1
+  m_SendInterval: 0.033333335
   m_SyncRotationAxis: 7
   m_RotationSyncCompression: 0
   m_SyncSpin: 0
@@ -159,6 +159,7 @@ MonoBehaviour:
   slowSpeed: 4
   speed: 8
   tick: 0
+  segments: []
   mySegs: []
   pingDelta: 0
   segmentPrefab: {fileID: 4980723949693688, guid: 93ec3fdb050ed474b9f134330ef70d41,
